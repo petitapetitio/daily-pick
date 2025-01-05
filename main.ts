@@ -43,7 +43,7 @@ export default class DailyPick extends Plugin {
 
             const currentContent = await this.app.vault.read(file);
             const item = items[this.settings.currentIndex % items.length]
-            const newContent = `${currentContent}\n\n${item}\n\n`;
+            const newContent = `${currentContent}\n${item}\n\n`;
             await this.app.vault.modify(file, newContent);
 
             this.settings.currentIndex += 1;
