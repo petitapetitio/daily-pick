@@ -27,12 +27,10 @@ export default class DailyPick extends Plugin {
 	async onFileCreated(file: TAbstractFile) {
         if (!(file instanceof TFile)) return;
 
-        // Check if the file is a daily note (YYYY-MM-DD format)
         const isDailyNote = /^\d{4}-\d{2}-\d{2}\.md$/.test(file.name);
         if (!isDailyNote) return;
 
         try {
-            // Get items from source file
             const sourceFile = this.app.vault.getAbstractFileByPath(this.settings.sourceFilePath);
             if (!(sourceFile instanceof TFile)) {
                 console.error('Source file not found:', this.settings.sourceFilePath);
@@ -43,16 +41,13 @@ export default class DailyPick extends Plugin {
             const items = this.parseItems(sourceContent);
             if (items.length === 0) return;
 
-            // Get current content of the daily note
             const currentContent = await this.app.vault.read(file);
-
-            // Prepare items for insertion
             const item = items[this.settings.currentIndex % items.length]
-            this.settings.currentIndex += 1;
-			await this.saveSettings();
-
             const newContent = `${item}\n\n${currentContent}`;
             await this.app.vault.modify(file, newContent);
+
+            this.settings.currentIndex += 1;
+			await this.saveSettings();
 
         } catch (error) {
             console.error('Error injecting items into daily note:', error);
@@ -103,7 +98,6 @@ class DailyPickSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        // Add a button to reset the cycle
         new Setting(containerEl)
             .setName('Reset cycle')
             .setDesc('Reset to the first item in the list')
@@ -115,7 +109,6 @@ class DailyPickSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        // Show current position
         const currentPosition = containerEl.createEl('div', {
             text: `Current position: ${this.plugin.settings.currentIndex}`
         });
