@@ -43,7 +43,7 @@ export default class DailyPick extends Plugin {
 
             const currentContent = await this.app.vault.read(file);
             const item = items[this.settings.currentIndex % items.length]
-            const newContent = `${item}\n\n${currentContent}`;
+            const newContent = `${currentContent}\n\n${item}\n\n`;
             await this.app.vault.modify(file, newContent);
 
             this.settings.currentIndex += 1;
@@ -59,9 +59,9 @@ export default class DailyPick extends Plugin {
         return content
             .split('\n')
             .map(line => line.trim())
-            .filter(line => line.length > 0)
-            // Remove existing list markers if present
-            .map(line => line.replace(/^[-*+]\s*(\[ \])?/, '').trim());
+			.filter(line => line.length > 0 && /^(\d+\.|\- )/.test(line))
+            .map(line => line.replace(/^(\d+\.|\- )\s*(\[ \])?/, '').trim())  // Remove list/task markers
+            .map(line => line.replace(/^\d+\s*/, '').trim());  // Remove any remaining number prefixes
     }
 
 	async loadSettings() {
