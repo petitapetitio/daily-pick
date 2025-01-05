@@ -1,86 +1,73 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TAbstractFile } from 'obsidian';
 
-// Remember to rename these classes and interfaces!
-
-interface MyPluginSettings {
-	mySetting: string;
+interface DailyPickSettings {
+	sourceFilePath: string;
+    currentIndex: number;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+const DEFAULT_SETTINGS: DailyPickSettings = {
+	sourceFilePath: 'lists/daily-items.md',
+    currentIndex: 0
 }
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class DailyPick extends Plugin {
+	settings: DailyPickSettings;
 
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
+		this.addSettingTab(new DailyPickSettingTab(this.app, this));
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			}
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-	}
-
-	onunload() {
+		this.registerEvent(
+            this.app.vault.on('create', (file: TAbstractFile) => this.onFileCreated(file))
+        );
 
 	}
+
+	async onFileCreated(file: TAbstractFile) {
+        if (!(file instanceof TFile)) return;
+
+        // Check if the file is a daily note (YYYY-MM-DD format)
+        const isDailyNote = /^\d{4}-\d{2}-\d{2}\.md$/.test(file.name);
+        if (!isDailyNote) return;
+
+        try {
+            // Get items from source file
+            const sourceFile = this.app.vault.getAbstractFileByPath(this.settings.sourceFilePath);
+            if (!(sourceFile instanceof TFile)) {
+                console.error('Source file not found:', this.settings.sourceFilePath);
+                return;
+            }
+
+            const sourceContent = await this.app.vault.read(sourceFile);
+            const items = this.parseItems(sourceContent);
+            if (items.length === 0) return;
+
+            // Get current content of the daily note
+            const currentContent = await this.app.vault.read(file);
+
+            // Prepare items for insertion
+            const item = items[this.settings.currentIndex % items.length]
+            this.settings.currentIndex += 1;
+			await this.saveSettings();
+
+            const newContent = `${item}\n\n${currentContent}`;
+            await this.app.vault.modify(file, newContent);
+
+        } catch (error) {
+            console.error('Error injecting items into daily note:', error);
+        }
+    }
+
+    parseItems(content: string): string[] {
+        // Split content into lines and filter out empty lines
+        return content
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0)
+            // Remove existing list markers if present
+            .map(line => line.replace(/^[-*+]\s*(\[ \])?/, '').trim());
+    }
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -91,26 +78,10 @@ export default class MyPlugin extends Plugin {
 	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
+class DailyPickSettingTab extends PluginSettingTab {
+	plugin: DailyPick;
 
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: DailyPick) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -119,16 +90,34 @@ class SampleSettingTab extends PluginSettingTab {
 		const {containerEl} = this;
 
 		containerEl.empty();
+		containerEl.createEl('h2', {text: 'Daily Pick Settings'});
 
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
+            .setName('Source File Path')
+            .setDesc('Path to the file containing items to inject (relative to vault root)')
+            .addText(text => text
+                .setPlaceholder('lists/daily-items.md')
+                .setValue(this.plugin.settings.sourceFilePath)
+                .onChange(async (value) => {
+                    this.plugin.settings.sourceFilePath = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // Add a button to reset the cycle
+        new Setting(containerEl)
+            .setName('Reset cycle')
+            .setDesc('Reset to the first item in the list')
+            .addButton(button => button
+                .setButtonText('Reset')
+                .onClick(async () => {
+                    this.plugin.settings.currentIndex = 0;
+                    this.plugin.settings.lastUsedDate = '';
+                    await this.plugin.saveSettings();
+                }));
+
+        // Show current position
+        const currentPosition = containerEl.createEl('div', {
+            text: `Current position: ${this.plugin.settings.currentIndex}`
+        });
 	}
 }
