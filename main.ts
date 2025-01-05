@@ -105,7 +105,6 @@ class DailyPickSettingTab extends PluginSettingTab {
                 .setButtonText('Reset')
                 .onClick(async () => {
                     this.plugin.settings.currentIndex = 0;
-                    this.plugin.settings.lastUsedDate = '';
                     await this.plugin.saveSettings();
                 }));
 
